@@ -34,7 +34,7 @@
     "browser",
     "session-management"
   ],
-  "author": "",
+  "author": "Sandy",
   "license": "MIT",
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^15.0.0",
@@ -47,10 +47,10 @@
   },
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/SandySY/session-lifecycle"
   },
-  "homepage": "",
+  "homepage": "https://github.com/SandySY/session-lifecycle",
   "bugs": {
-    "url": ""
+    "url": "https://github.com/SandySY/session-lifecycle/issues"
   }
 }
