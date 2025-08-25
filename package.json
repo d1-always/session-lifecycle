@@ -1,0 +1,56 @@
+{
+  "name": "session-lifecycle",
+  "version": "1.0.0",
+  "description": "A modern TypeScript/JavaScript library for managing session lifecycle with on_session_start and on_session_end methods",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "unpkg": "dist/umd/session-lifecycle.min.js",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "npm run clean && npm run build:types && npm run build:cjs && npm run build:esm && npm run build:umd",
+    "build:types": "tsc --declaration --emitDeclarationOnly --outDir dist/types",
+    "build:cjs": "tsc --module commonjs --outDir dist/cjs --target es5",
+    "build:esm": "tsc --module es2020 --outDir dist/esm --target es2018",
+    "build:umd": "rollup -c",
+    "clean": "rimraf dist",
+    "prepublishOnly": "npm run build",
+    "test": "echo \"No tests yet\" && exit 0"
+  },
+  "keywords": [
+    "session",
+    "lifecycle",
+    "typescript",
+    "javascript",
+    "browser",
+    "session-management"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^15.0.0",
+    "@rollup/plugin-terser": "^0.4.0",
+    "@rollup/plugin-typescript": "^11.0.0",
+    "rimraf": "^5.0.0",
+    "rollup": "^3.0.0",
+    "tslib": "^2.8.1",
+    "typescript": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "homepage": "",
+  "bugs": {
+    "url": ""
+  }
+}

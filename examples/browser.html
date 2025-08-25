@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Session Lifecycle 浏览器示例</title>
+</head>
+<body>
+    <h1>Session Lifecycle 浏览器示例</h1>
+    <p>打开浏览器控制台查看输出</p>
+    
+    <button id="start">模拟会话开始</button>
+    <button id="end">模拟会话结束</button>
+
+    <!-- 引入 session-lifecycle -->
+    <script src="../dist/umd/session-lifecycle.min.js"></script>
+    <script>
+        // 创建会话生命周期实例
+        const { on_session_start, on_session_end } = SessionLifecycle.default();
+        
+        // 注册会话开始事件
+        on_session_start(function() {
+            console.log('🚀 会话开始了！');
+            document.body.style.backgroundColor = '#e8f5e8';
+        });
+        
+        // 注册会话结束事件
+        on_session_end(function() {
+            console.log('🔴 会话结束了！');
+            document.body.style.backgroundColor = '#ffe8e8';
+        });
+        
+        // 添加多个监听器
+        on_session_start(function() {
+            console.log('📱 另一个开始监听器');
+        });
+        
+        // 演示用按钮（注：实际的触发逻辑需要在库的内部实现中添加）
+        document.getElementById('start').addEventListener('click', function() {
+            console.log('点击了开始按钮（实际触发需要库的内部实现）');
+        });
+        
+        document.getElementById('end').addEventListener('click', function() {
+            console.log('点击了结束按钮（实际触发需要库的内部实现）');
+        });
+    </script>
+</body>
+</html>
