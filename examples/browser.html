@@ -4,44 +4,167 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Session Lifecycle 浏览器示例</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+            transition: background-color 0.3s ease;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .active { background: #d4edda; color: #155724; }
+        .inactive { background: #f8d7da; color: #721c24; }
+        .paused { background: #fff3cd; color: #856404; }
+        .log {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            padding: 10px;
+            margin: 10px 0;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .log-entry {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .log-start { background: #e8f5e8; }
+        .log-end { background: #ffe8e8; }
+        .log-life { background: #e8f4f8; }
+        button {
+            margin: 5px;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+            cursor: pointer;
+        }
+        button:hover { background: #0056b3; }
+    </style>
 </head>
 <body>
     <h1>Session Lifecycle 浏览器示例</h1>
-    <p>打开浏览器控制台查看输出</p>
     
-    <button id="start">模拟会话开始</button>
-    <button id="end">模拟会话结束</button>
+    <div id="status" class="status inactive">状态: 未初始化</div>
+    
+    <div>
+        <h3>操作说明：</h3>
+        <ul>
+            <li>🟢 页面加载后自动开始会话（init类型）</li>
+            <li>⏱️ 每30秒发送一次心跳（session_life事件）</li>
+            <li>🔄 切换到其他标签页会暂停会话</li>
+            <li>↩️ 切回此标签页会恢复会话（active类型）</li>
+            <li>⏰ 2分钟内无活动会自动结束会话</li>
+            <li>🖱️ 点击、滚动、移动鼠标会重置不活动计时器</li>
+        </ul>
+    </div>
+
+    <div>
+        <button onclick="toggleDebug()">切换调试模式</button>
+        <button onclick="clearLog()">清空日志</button>
+        <button onclick="manualActivity()">手动触发活动</button>
+    </div>
+
+    <div id="log" class="log"></div>
 
     <!-- 引入 session-lifecycle -->
     <script src="../dist/umd/session-lifecycle.min.js"></script>
     <script>
-        // 创建会话生命周期实例
-        const { on_session_start, on_session_end } = SessionLifecycle.default();
+        let debugMode = false;
+        let sessionInstance;
         
-        // 注册会话开始事件
-        on_session_start(function() {
-            console.log('🚀 会话开始了！');
-            document.body.style.backgroundColor = '#e8f5e8';
+        function log(message, type = 'info') {
+            const logElement = document.getElementById('log');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry log-' + type;
+            entry.textContent = new Date().toLocaleTimeString() + ' - ' + message;
+            logElement.appendChild(entry);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        function updateStatus(status, type = '') {
+            const statusElement = document.getElementById('status');
+            statusElement.textContent = '状态: ' + status + (type ? ' (' + type + ')' : '');
+            statusElement.className = 'status ' + status.toLowerCase();
+        }
+
+        function toggleDebug() {
+            debugMode = !debugMode;
+            if (sessionInstance) {
+                sessionInstance.destroy();
+            }
+            initializeSession();
+        }
+
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        function manualActivity() {
+            log('手动触发用户活动', 'info');
+            // 派发一个点击事件来模拟用户活动
+            document.dispatchEvent(new Event('click'));
+        }
+
+        function initializeSession() {
+            // 创建会话生命周期实例（启用调试模式）
+            sessionInstance = SessionLifecycle.default({
+                debug: debugMode,
+                // heartbeatInterval: 1000, // 30秒心跳
+                // inactivityTimeout: 3000  // 2分钟不活动超时
+            });
+            
+            const { on_session_start, on_session_end, on_session_life } = sessionInstance;
+            
+            // 注册会话开始事件
+            on_session_start(function(data) {
+                const typeText = data.type === 'init' ? '初始化' : '重新激活';
+                log(`🚀 会话开始！类型: ${typeText}, 时间戳: ${data.timestamp}`, 'start');
+                updateStatus('ACTIVE', data.type);
+                document.body.style.backgroundColor = '#e8f5e8';
+            });
+            
+            // 注册会话结束事件
+            on_session_end(function(data) {
+                const sessionDuration = Math.round(data.duration / 1000);
+                const totalDuration = Math.round(data.total_duration / 1000);
+                log(`🔴 会话结束！会话时长: ${sessionDuration}秒, 总时长: ${totalDuration}秒`, 'end');
+                updateStatus('INACTIVE');
+                document.body.style.backgroundColor = '#ffe8e8';
+            });
+            
+            // 注册会话生命周期事件（心跳）
+            on_session_life(function(data) {
+                const intervalTime = Math.round(data.duration / 1000);
+                const totalTime = Math.round(data.total_duration / 1000);
+                log(`💓 会话心跳！心跳间隔: ${intervalTime}秒, 会话总时长: ${totalTime}秒`, 'life');
+            });
+
+            log('Session Lifecycle 已初始化' + (debugMode ? ' (调试模式)' : ''), 'info');
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', function() {
+            initializeSession();
         });
-        
-        // 注册会话结束事件
-        on_session_end(function() {
-            console.log('🔴 会话结束了！');
-            document.body.style.backgroundColor = '#ffe8e8';
-        });
-        
-        // 添加多个监听器
-        on_session_start(function() {
-            console.log('📱 另一个开始监听器');
-        });
-        
-        // 演示用按钮（注：实际的触发逻辑需要在库的内部实现中添加）
-        document.getElementById('start').addEventListener('click', function() {
-            console.log('点击了开始按钮（实际触发需要库的内部实现）');
-        });
-        
-        document.getElementById('end').addEventListener('click', function() {
-            console.log('点击了结束按钮（实际触发需要库的内部实现）');
+
+        // 监听页面可见性变化用于UI更新
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                updateStatus('PAUSED');
+                document.body.style.backgroundColor = '#fff3cd';
+            }
         });
     </script>
 </body>
