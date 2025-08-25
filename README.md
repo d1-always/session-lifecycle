@@ -59,6 +59,7 @@ const { on_session_start, on_session_end, on_session_life } = createSessionLifec
   inactivityTimeout: 120000, // 2分钟不活动超时
   debug: true                // 启用调试日志
 });
+// 参数均为非必填
 
 // 监听会话开始事件
 on_session_start((data) => {
@@ -277,6 +278,18 @@ npm install
 
 # 构建
 npm run build
+
+# 检查包内容 并 发布
+npm pack --dry-run
+
+# 如果还未登录npm
+npm login
+
+# 发布包
+npm publish
+
+# 发布成功后，用户就可以安装使用
+npm install session-lifecycle
 
 # 清理构建文件
 npm run clean
