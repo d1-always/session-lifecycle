@@ -121,8 +121,8 @@
             // 创建会话生命周期实例（启用调试模式）
             sessionInstance = SessionLifecycle.default({
                 debug: debugMode,
-                // heartbeatInterval: 1000, // 30秒心跳
-                // inactivityTimeout: 3000  // 2分钟不活动超时
+                heartbeatInterval: 3000, // 30秒心跳
+                inactivityTimeout: 10000  // 2分钟不活动超时
             });
             
             const { on_session_start, on_session_end, on_session_life } = sessionInstance;

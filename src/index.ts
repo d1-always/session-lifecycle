@@ -94,6 +94,8 @@ export class SessionLifecycle {
   private sessionStartTime: number = 0;
   private lastActivityTime: number = 0;
   private lastHeartbeatTime: number = 0;
+  private lastEventTime: number = 0;
+  private pauseStartTime: number = 0;
   
   // Timers
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -103,6 +105,7 @@ export class SessionLifecycle {
   // Event listeners
   private visibilityChangeListener: (() => void) | null = null;
   private activityListeners: Array<{ element: Element | Document | Window, event: string, listener: () => void }> = [];
+  private beforeUnloadListener: (() => void) | null = null;
   
   private isInitialized = false;
 
@@ -191,6 +194,7 @@ export class SessionLifecycle {
     // Set up event listeners
     this.setupPageVisibilityListener();
     this.setupActivityListeners();
+    this.setupBeforeUnloadListener();
 
     // Start session
     this.startSession('init');
@@ -241,11 +245,30 @@ export class SessionLifecycle {
   }
 
   /**
+   * Set up page unload listener to ensure session end event is triggered
+   */
+  private setupBeforeUnloadListener(): void {
+    if (typeof window === 'undefined') return;
+
+    this.beforeUnloadListener = () => {
+      this.log('Page unloading - ensuring session end event');
+      // 确保在页面卸载前触发 session end 事件
+      if (this.state === SessionState.ACTIVE) {
+        this.endSession();
+      }
+    };
+
+    window.addEventListener('beforeunload', this.beforeUnloadListener);
+    window.addEventListener('pagehide', this.beforeUnloadListener);
+  }
+
+  /**
    * Handle user activity
    */
   private onUserActivity(): void {
     const now = Date.now();
     this.lastActivityTime = now;
+    this.lastEventTime = now; // 用户活动也是事件
 
     // If session was inactive due to inactivity, restart it
     if (this.state === SessionState.INACTIVE && this.isPageVisible()) {
@@ -268,6 +291,7 @@ export class SessionLifecycle {
     this.sessionStartTime = Date.now();
     this.lastActivityTime = this.sessionStartTime;
     this.lastHeartbeatTime = this.sessionStartTime;
+    this.lastEventTime = this.sessionStartTime;
 
     // Start heartbeat timer
     this.startHeartbeat();
@@ -289,9 +313,10 @@ export class SessionLifecycle {
     if (this.state === SessionState.INACTIVE) return;
 
     const now = Date.now();
-    const sessionDuration = this.sessionStartTime > 0 ? now - this.sessionStartTime : 0;
+    const intervalDuration = this.lastEventTime > 0 ? now - this.lastEventTime : 0; // 最近一次事件到当前的间隔
+    const totalDuration = this.sessionStartTime > 0 ? now - this.sessionStartTime : 0; // 总会话时间
     
-    this.log(`Ending session with duration: ${sessionDuration}ms`);
+    this.log(`Ending session - interval: ${intervalDuration}ms, total: ${totalDuration}ms`);
     this.state = SessionState.INACTIVE;
 
     // Stop timers
@@ -300,10 +325,13 @@ export class SessionLifecycle {
 
     // Trigger callbacks
     this.triggerSessionEnd({
-      duration: sessionDuration,      // 会话持续时间
-      total_duration: sessionDuration, // 总时间（对于结束事件，与duration相同）
+      duration: intervalDuration,      // 最近一次事件到当前的间隔时间
+      total_duration: totalDuration,   // 会话总时间
       timestamp: now
     });
+    
+    // Update last event time
+    this.lastEventTime = now;
   }
 
   /**
@@ -313,10 +341,12 @@ export class SessionLifecycle {
     if (this.state !== SessionState.ACTIVE) return;
 
     const now = Date.now();
-    const sessionDuration = this.sessionStartTime > 0 ? now - this.sessionStartTime : 0;
+    const intervalDuration = this.lastEventTime > 0 ? now - this.lastEventTime : 0; // 最近一次事件到当前的间隔
+    const totalDuration = this.sessionStartTime > 0 ? now - this.sessionStartTime : 0; // 总会话时间
     
-    this.log(`Pausing session with duration: ${sessionDuration}ms`);
+    this.log(`Pausing session - interval: ${intervalDuration}ms, total: ${totalDuration}ms`);
     this.state = SessionState.PAUSED;
+    this.pauseStartTime = now; // 记录暂停开始时间
 
     // Stop timers
     this.stopHeartbeat();
@@ -324,10 +354,13 @@ export class SessionLifecycle {
 
     // Trigger end event
     this.triggerSessionEnd({
-      duration: sessionDuration,      // 会话持续时间
-      total_duration: sessionDuration, // 总时间（对于暂停事件，与duration相同）
+      duration: intervalDuration,      // 最近一次事件到当前的间隔时间
+      total_duration: totalDuration,   // 会话总时间
       timestamp: now
     });
+    
+    // Update last event time
+    this.lastEventTime = now;
   }
 
   /**
@@ -336,8 +369,20 @@ export class SessionLifecycle {
   private resumeSession(): void {
     if (this.state !== SessionState.PAUSED) return;
 
-    this.log('Resuming session');
-    this.startSession('active');
+    const now = Date.now();
+    const pauseDuration = this.pauseStartTime > 0 ? now - this.pauseStartTime : 0;
+    
+    this.log(`Attempting to resume session after ${pauseDuration}ms pause`);
+    
+    // 只有暂停超过30秒才重新启动会话
+    if (pauseDuration > this.config.heartbeatInterval) {
+      this.log(`Pause duration > ${this.config.heartbeatInterval}ms, starting new session`);
+      this.startSession('active');
+    } else {
+      this.log(`Pause duration <= ${this.config.heartbeatInterval}ms, not resuming session`);
+      // 可选：这里可以直接切换状态到INACTIVE，等待用户活动重新触发
+      this.state = SessionState.INACTIVE;
+    }
   }
 
   /**
@@ -360,8 +405,9 @@ export class SessionLifecycle {
           timestamp: now
         });
         
-        // 更新最后心跳时间
+        // 更新最后心跳时间和最后事件时间
         this.lastHeartbeatTime = now;
+        this.lastEventTime = now;
       }
     }, this.config.heartbeatInterval);
   }
@@ -479,6 +525,11 @@ export class SessionLifecycle {
       document.removeEventListener('visibilitychange', this.visibilityChangeListener);
     }
 
+    if (this.beforeUnloadListener && typeof window !== 'undefined') {
+      window.removeEventListener('beforeunload', this.beforeUnloadListener);
+      window.removeEventListener('pagehide', this.beforeUnloadListener);
+    }
+
     this.activityListeners.forEach(({ element, event, listener }) => {
       element.removeEventListener(event, listener);
     });
@@ -489,6 +540,7 @@ export class SessionLifecycle {
     this.lifeCallbacks = [];
     this.activityListeners = [];
     this.visibilityChangeListener = null;
+    this.beforeUnloadListener = null;
     this.isInitialized = false;
   }
 }
