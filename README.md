@@ -15,19 +15,22 @@
 - 🌐 **多平台兼容** - 支持 ES 模块、CommonJS 和 UMD 格式
 - 📦 **轻量级** - 无外部依赖，压缩后仅 ~3KB
 
-## 目录
-session-lifecycle@1.0.0
-├── 📁 dist/
-│   ├── cjs/          # CommonJS 模块
-│   ├── esm/          # ES 模块  
-│   ├── umd/          # UMD 格式 (浏览器)
-│   └── types/        # TypeScript 类型定义
-├── 📁 examples/      # 使用示例
-│   ├── browser.html  # 交互式浏览器演示
-│   ├── node.js       # Node.js 示例
-│   └── typescript.ts # TypeScript 示例
-├── 📄 README.md      # 完整文档
-└── 📄 package.json   # 包配置
+## 📦 包结构
+
+```
+session-lifecycle/
+├── dist/                    # 构建输出目录
+│   ├── cjs/                # CommonJS 模块
+│   ├── esm/                # ES 模块  
+│   ├── umd/                # UMD 格式 (浏览器)
+│   └── types/              # TypeScript 类型定义
+├── examples/               # 使用示例
+│   ├── browser.html        # 交互式浏览器演示
+│   ├── node.js             # Node.js 示例
+│   └── typescript.ts       # TypeScript 示例
+├── README.md               # 完整文档
+└── package.json            # 包配置
+```
 
 ## 安装
 
