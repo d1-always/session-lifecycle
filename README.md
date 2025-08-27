@@ -11,6 +11,8 @@
 - ⏰ **不活动检测** - 2分钟无活动自动结束会话
 - 📊 **详细事件数据** - 包含时间戳、持续时间、事件类型等
 - 🔧 **高度可配置** - 自定义心跳间隔、不活动超时等
+- 🛡️ **单例模式** - 自动管理实例，防止冲突和内存泄漏
+- ⚡ **异步销毁** - 确保回调完全执行后再创建新实例
 - 💪 **TypeScript 完美支持** - 完整的类型定义和智能提示
 - 🌐 **多平台兼容** - 支持 ES 模块、CommonJS 和 UMD 格式
 - 📦 **轻量级** - 无外部依赖，压缩后仅 ~3KB
@@ -70,8 +72,8 @@ pnpm install session-lifecycle
 ```typescript
 import createSessionLifecycle from 'session-lifecycle';
 
-// 创建会话生命周期实例
-const { on_session_start, on_session_end, on_session_life } = createSessionLifecycle({
+// 创建会话生命周期实例 (异步)
+const { on_session_start, on_session_end, on_session_life, destroy } = await createSessionLifecycle({
   heartbeatInterval: 30000,  // 30秒心跳
   inactivityTimeout: 120000, // 2分钟不活动超时
   debug: true                // 启用调试日志
@@ -103,6 +105,9 @@ on_session_life((data) => {
     timestamp: data.timestamp
   });
 });
+
+// 清理资源时 (异步)
+await destroy();
 ```
 
 ### CommonJS
@@ -110,7 +115,8 @@ on_session_life((data) => {
 ```javascript
 const createSessionLifecycle = require('session-lifecycle').default;
 
-const { on_session_start, on_session_end, on_session_life } = createSessionLifecycle();
+async function initSession() {
+  const { on_session_start, on_session_end, on_session_life, destroy } = await createSessionLifecycle();
 
 on_session_start((data) => {
   console.log(`会话开始！类型: ${data.type}, 时间: ${new Date(data.timestamp)}`);
@@ -127,6 +133,12 @@ on_session_life((data) => {
   const totalTime = Math.round(data.total_duration / 1000);
   console.log(`会话心跳 - 间隔: ${intervalTime}秒，总运行: ${totalTime}秒`);
 });
+
+  // 清理资源时
+  await destroy();
+}
+
+initSession().catch(console.error);
 ```
 
 ### 浏览器 (script 标签)
@@ -134,8 +146,9 @@ on_session_life((data) => {
 ```html
 <script src="https://unpkg.com/session-lifecycle/dist/umd/session-lifecycle.min.js"></script>
 <script>
-  // 通过全局对象 SessionLifecycle 访问
-  const { on_session_start, on_session_end, on_session_life } = SessionLifecycle.default();
+  async function initSession() {
+    // 通过全局对象 SessionLifecycle 访问 (异步)
+    const { on_session_start, on_session_end, on_session_life, destroy } = await SessionLifecycle.default();
   
   on_session_start(function(data) {
     console.log('会话开始！类型:', data.type);
@@ -159,14 +172,38 @@ on_session_life((data) => {
       const totalSeconds = Math.round(data.total_duration / 1000);
       console.log('心跳 - 间隔:', intervalSeconds, '秒，总运行:', totalSeconds, '秒');
     });
+    
+    // 页面卸载时清理资源
+    window.addEventListener('beforeunload', async () => {
+      await destroy();
+    });
+  }
+  
+  initSession().catch(console.error);
 </script>
+```
+
+### 同步版本 (向后兼容)
+
+如果你不想处理异步，可以使用同步版本：
+
+```javascript
+import { createSessionLifecycleSync } from 'session-lifecycle';
+
+// 同步创建实例 (注意：销毁旧实例时不会等待回调完成)
+const { on_session_start, on_session_end, on_session_life, destroy } = createSessionLifecycleSync({
+  debug: true
+});
+
+// destroy 方法仍然返回 Promise
+await destroy();
 ```
 
 ## 📚 API 参考
 
 ### createSessionLifecycle(config?)
 
-工厂函数，创建会话生命周期实例并返回其方法。
+异步工厂函数，创建会话生命周期实例并返回其方法。确保在创建新实例前完全清理旧实例。
 
 **参数:**
 ```typescript
@@ -176,6 +213,13 @@ interface SessionLifecycleConfig {
   debug?: boolean;            // 调试模式，默认 false
 }
 ```
+
+**返回值:**
+Promise，解析为包含会话生命周期方法和清理函数的对象
+
+### createSessionLifecycleSync(config?)
+
+同步版本的工厂函数，为了向后兼容而保留。**注意：** 销毁旧实例时不会等待回调完成。
 
 **返回值:**
 包含会话生命周期方法和清理函数的对象
@@ -221,10 +265,10 @@ interface SessionLifeData {
 ```
 
 #### destroy()
-清理资源，停止所有监听器和定时器
+异步清理资源，停止所有监听器和定时器，并等待所有回调完成
 
 ```typescript
-destroy(): void
+destroy(): Promise<void>
 ```
 
 ## 🛠️ 高级用法
@@ -232,7 +276,7 @@ destroy(): void
 ### 配置选项
 
 ```typescript
-const sessionMethods = createSessionLifecycle({
+const sessionMethods = await createSessionLifecycle({
   heartbeatInterval: 15000,  // 15秒心跳（更频繁）
   inactivityTimeout: 300000, // 5分钟不活动超时
   debug: true                // 启用调试日志
@@ -242,22 +286,66 @@ const sessionMethods = createSessionLifecycle({
 ### 资源清理
 
 ```typescript
-const sessionMethods = createSessionLifecycle();
+const sessionMethods = await createSessionLifecycle();
 const { destroy } = sessionMethods;
 
 // 页面卸载时清理资源
-window.addEventListener('beforeunload', () => {
-  destroy();
+window.addEventListener('beforeunload', async () => {
+  await destroy();
 });
 ```
 
-### 多实例使用
+### 单例模式
+
+插件自动确保同一时间只有一个活跃实例，多次调用会自动清理旧实例：
 
 ```typescript
-// 不同配置的多个实例
-const fastSession = createSessionLifecycle({ heartbeatInterval: 10000 });
-const slowSession = createSessionLifecycle({ heartbeatInterval: 60000 });
+// 第一次创建
+const session1 = await createSessionLifecycle({ heartbeatInterval: 10000 });
+
+// 第二次创建会自动销毁 session1 (等待回调完成)
+const session2 = await createSessionLifecycle({ heartbeatInterval: 60000 });
+
+// 手动检查和管理实例
+import { hasActiveSessionLifecycle, destroyCurrentSessionLifecycle } from 'session-lifecycle';
+
+if (hasActiveSessionLifecycle()) {
+  console.log('已有活跃实例');
+  await destroyCurrentSessionLifecycle(); // 手动销毁
+}
 ```
+
+## 🔄 异步支持与单例模式
+
+### 为什么需要异步？
+
+Session Lifecycle v1.0+ 引入了异步销毁机制，解决了以下关键问题：
+
+1. **回调完整性** - 确保 `on_session_end` 回调完全执行后再创建新实例
+2. **数据一致性** - 避免新旧实例的事件回调交错执行
+3. **资源清理** - 保证所有定时器和事件监听器被正确清理
+
+### 异步vs同步对比
+
+```typescript
+// ❌ 旧版本 - 可能的问题
+const session1 = createSessionLifecycle();
+const session2 = createSessionLifecycle(); // 可能在session1销毁前创建
+
+// ✅ 新版本 - 安全的异步方式
+const session1 = await createSessionLifecycle();
+const session2 = await createSessionLifecycle(); // 等待session1完全销毁
+
+// ⚠️ 向后兼容 - 同步版本 (不推荐)
+const session = createSessionLifecycleSync(); // 不等待回调完成
+```
+
+### 单例模式优势
+
+- **防止冲突** - 避免多个实例的事件监听器重复注册
+- **内存优化** - 自动清理旧实例，防止内存泄漏
+- **开发友好** - 热重载时自动处理实例清理
+- **数据准确** - 确保会话数据的一致性和准确性
 
 ## 💪 TypeScript 支持
 

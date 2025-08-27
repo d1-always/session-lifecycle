@@ -99,12 +99,12 @@
             statusElement.className = 'status ' + status.toLowerCase();
         }
 
-        function toggleDebug() {
+        async function toggleDebug() {
             debugMode = !debugMode;
             if (sessionInstance) {
-                sessionInstance.destroy();
+                await sessionInstance.destroy();
             }
-            initializeSession();
+            await initializeSession();
         }
 
         function clearLog() {
@@ -117,9 +117,9 @@
             document.dispatchEvent(new Event('click'));
         }
 
-        function initializeSession() {
+        async function initializeSession() {
             // 创建会话生命周期实例（启用调试模式）
-            sessionInstance = SessionLifecycle.default({
+            sessionInstance = await SessionLifecycle.default({
                 debug: debugMode,
                 heartbeatInterval: 3000, // 30秒心跳
                 inactivityTimeout: 10000  // 2分钟不活动超时
@@ -155,8 +155,8 @@
         }
 
         // 页面加载时初始化
-        window.addEventListener('load', function() {
-            initializeSession();
+        window.addEventListener('load', async function() {
+            await initializeSession();
         });
 
         // 监听页面可见性变化用于UI更新

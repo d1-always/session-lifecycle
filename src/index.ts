@@ -210,7 +210,9 @@ export class SessionLifecycle {
       if (document.hidden) {
         // Page became hidden - pause session
         this.log('Page hidden - pausing session');
-        this.pauseSession();
+        this.pauseSession().catch(error => {
+          console.error('Error pausing session:', error);
+        });
       } else {
         // Page became visible - resume session
         this.log('Page visible - resuming session');
@@ -254,7 +256,9 @@ export class SessionLifecycle {
       this.log('Page unloading - ensuring session end event');
       // 确保在页面卸载前触发 session end 事件
       if (this.state === SessionState.ACTIVE) {
-        this.endSession();
+        this.endSession().catch(error => {
+          console.error('Error ending session during page unload:', error);
+        });
       }
     };
 
@@ -309,7 +313,7 @@ export class SessionLifecycle {
   /**
    * End the current session
    */
-  private endSession(): void {
+  private async endSession(): Promise<void> {
     if (this.state === SessionState.INACTIVE) return;
 
     const now = Date.now();
@@ -323,8 +327,8 @@ export class SessionLifecycle {
     this.stopHeartbeat();
     this.stopInactivityTimer();
 
-    // Trigger callbacks
-    this.triggerSessionEnd({
+    // Trigger callbacks and wait for completion
+    await this.triggerSessionEnd({
       duration: intervalDuration,      // 最近一次事件到当前的间隔时间
       total_duration: totalDuration,   // 会话总时间
       timestamp: now
@@ -337,7 +341,7 @@ export class SessionLifecycle {
   /**
    * Pause session (when page becomes hidden)
    */
-  private pauseSession(): void {
+  private async pauseSession(): Promise<void> {
     if (this.state !== SessionState.ACTIVE) return;
 
     const now = Date.now();
@@ -352,8 +356,8 @@ export class SessionLifecycle {
     this.stopHeartbeat();
     this.stopInactivityTimer();
 
-    // Trigger end event
-    this.triggerSessionEnd({
+    // Trigger end event and wait for completion
+    await this.triggerSessionEnd({
       duration: intervalDuration,      // 最近一次事件到当前的间隔时间
       total_duration: totalDuration,   // 会话总时间
       timestamp: now
@@ -430,7 +434,9 @@ export class SessionLifecycle {
     
     this.inactivityTimer = setTimeout(() => {
       this.log('User inactivity detected - ending session');
-      this.endSession();
+      this.endSession().catch(error => {
+        console.error('Error ending session due to inactivity:', error);
+      });
     }, this.config.inactivityTimeout);
   }
 
@@ -465,16 +471,31 @@ export class SessionLifecycle {
   }
 
   /**
-   * Trigger session end callbacks
+   * Trigger session end callbacks and return a promise that resolves when all callbacks are processed
    */
-  private triggerSessionEnd(data: SessionEndData): void {
-    this.endCallbacks.forEach(callback => {
-      try {
-        callback(data);
-      } catch (error) {
-        console.error('Error in session end callback:', error);
-      }
+  private async triggerSessionEnd(data: SessionEndData): Promise<void> {
+    const promises = this.endCallbacks.map(callback => {
+      return new Promise<void>((resolve) => {
+        try {
+          // Execute callback in next tick to ensure it runs after current call stack
+          setTimeout(() => {
+            try {
+              callback(data);
+            } catch (error) {
+              console.error('Error in session end callback:', error);
+            } finally {
+              resolve();
+            }
+          }, 0);
+        } catch (error) {
+          console.error('Error scheduling session end callback:', error);
+          resolve();
+        }
+      });
     });
+
+    // Wait for all callbacks to complete
+    await Promise.all(promises);
   }
 
   /**
@@ -502,12 +523,12 @@ export class SessionLifecycle {
   /**
    * Clean up resources
    */
-  public destroy(): void {
+  public async destroy(): Promise<void> {
     this.log('Destroying session lifecycle instance');
     
-    // End current session
+    // End current session and wait for callbacks to complete
     if (this.state === SessionState.ACTIVE) {
-      this.endSession();
+      await this.endSession();
     }
 
     // Stop timers
@@ -545,20 +566,120 @@ export class SessionLifecycle {
   }
 }
 
+// Global instance management
+declare global {
+  interface Window {
+    __sessionLifecycleInstance?: SessionLifecycle;
+  }
+}
+
 /**
  * Factory function to create a new SessionLifecycle instance and return its methods
+ * Ensures only one instance exists per page - automatically destroys previous instances
  * @param config - Optional configuration object
- * @returns Object containing session lifecycle methods and instance
+ * @returns Promise that resolves to object containing session lifecycle methods and instance
  */
-export function createSessionLifecycle(config?: SessionLifecycleConfig): SessionLifecycleMethods & { destroy: () => void } {
+export async function createSessionLifecycle(config?: SessionLifecycleConfig): Promise<SessionLifecycleMethods & { destroy: () => Promise<void> }> {
+  // Check if we're in a browser environment
+  if (typeof window !== 'undefined') {
+    // If there's already an existing instance, destroy it first and wait for completion
+    if (window.__sessionLifecycleInstance) {
+      console.log('[SessionLifecycle] Destroying previous instance to ensure singleton behavior');
+      await window.__sessionLifecycleInstance.destroy();
+      window.__sessionLifecycleInstance = undefined;
+    }
+  }
+  
   const instance = new SessionLifecycle(config);
   const methods = instance.getMethods();
   
+  // Store the new instance globally (browser only)
+  if (typeof window !== 'undefined') {
+    window.__sessionLifecycleInstance = instance;
+  }
+  
   return {
     ...methods,
-    destroy: () => instance.destroy()
+    destroy: async () => {
+      await instance.destroy();
+      // Clear global reference when destroyed
+      if (typeof window !== 'undefined' && window.__sessionLifecycleInstance === instance) {
+        window.__sessionLifecycleInstance = undefined;
+      }
+    }
   };
 }
 
-// Default export for easier importing
+/**
+ * Get the current active SessionLifecycle instance if it exists
+ * @returns The current instance or undefined if no instance is active
+ */
+export function getCurrentSessionLifecycle(): SessionLifecycle | undefined {
+  if (typeof window !== 'undefined') {
+    return window.__sessionLifecycleInstance;
+  }
+  return undefined;
+}
+
+/**
+ * Check if there's already an active SessionLifecycle instance
+ * @returns True if an instance is active, false otherwise
+ */
+export function hasActiveSessionLifecycle(): boolean {
+  return typeof window !== 'undefined' && !!window.__sessionLifecycleInstance;
+}
+
+/**
+ * Destroy the current active SessionLifecycle instance if it exists
+ * @returns Promise that resolves to true if an instance was destroyed, false if no instance was active
+ */
+export async function destroyCurrentSessionLifecycle(): Promise<boolean> {
+  if (typeof window !== 'undefined' && window.__sessionLifecycleInstance) {
+    await window.__sessionLifecycleInstance.destroy();
+    window.__sessionLifecycleInstance = undefined;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Synchronous version of createSessionLifecycle for backward compatibility
+ * Note: This version destroys previous instances without waiting for their callbacks to complete
+ * @param config - Optional configuration object  
+ * @returns Object containing session lifecycle methods and instance
+ */
+export function createSessionLifecycleSync(config?: SessionLifecycleConfig): SessionLifecycleMethods & { destroy: () => Promise<void> } {
+  // Check if we're in a browser environment
+  if (typeof window !== 'undefined') {
+    // If there's already an existing instance, destroy it (without waiting)
+    if (window.__sessionLifecycleInstance) {
+      console.log('[SessionLifecycle] Destroying previous instance to ensure singleton behavior (sync)');
+      window.__sessionLifecycleInstance.destroy().catch(error => {
+        console.error('Error destroying previous instance:', error);
+      });
+      window.__sessionLifecycleInstance = undefined;
+    }
+  }
+  
+  const instance = new SessionLifecycle(config);
+  const methods = instance.getMethods();
+  
+  // Store the new instance globally (browser only)
+  if (typeof window !== 'undefined') {
+    window.__sessionLifecycleInstance = instance;
+  }
+  
+  return {
+    ...methods,
+    destroy: async () => {
+      await instance.destroy();
+      // Clear global reference when destroyed
+      if (typeof window !== 'undefined' && window.__sessionLifecycleInstance === instance) {
+        window.__sessionLifecycleInstance = undefined;
+      }
+    }
+  };
+}
+
+// Default export for easier importing (async version for better callback handling)
 export default createSessionLifecycle;
