@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Session Lifecycle - 移动端测试</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            transition: background-color 0.3s ease;
+            min-height: 100vh;
+            padding: 10px;
+            overflow-x: hidden;
+        }
+
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 15px;
+            background: linear-gradient(45deg, #ff6b6b, #ee5a24);
+            color: white;
+            border-radius: 10px;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            margin-bottom: 5px;
+        }
+
+        .device-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+        }
+
+        .device-info .label {
+            font-weight: bold;
+            color: #495057;
+        }
+
+        .status-panel {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .status-card {
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            transition: all 0.3s ease;
+        }
+
+        .status-card.active {
+            background: #d4edda;
+            border: 2px solid #28a745;
+            color: #155724;
+        }
+
+        .status-card.inactive {
+            background: #f8d7da;
+            border: 2px solid #dc3545;
+            color: #721c24;
+        }
+
+        .status-card.paused {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            color: #856404;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            padding: 12px 15px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            touch-action: manipulation; /* 优化移动端点击 */
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #007bff, #0056b3);
+            color: white;
+        }
+
+        .btn-primary:active {
+            transform: scale(0.95);
+            background: linear-gradient(45deg, #0056b3, #004085);
+        }
+
+        .btn-warning {
+            background: linear-gradient(45deg, #ffc107, #e0a800);
+            color: #212529;
+        }
+
+        .btn-warning:active {
+            transform: scale(0.95);
+        }
+
+        .btn-danger {
+            background: linear-gradient(45deg, #dc3545, #c82333);
+            color: white;
+        }
+
+        .btn-danger:active {
+            transform: scale(0.95);
+        }
+
+        .touch-area {
+            background: #e9ecef;
+            border-radius: 10px;
+            padding: 30px;
+            margin: 20px 0;
+            text-align: center;
+            border: 2px dashed #6c757d;
+            user-select: none;
+            touch-action: manipulation;
+        }
+
+        .touch-area.touched {
+            background: #d1ecf1;
+            border-color: #17a2b8;
+            animation: pulse 0.3s ease;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+
+        .log-container {
+            margin-top: 20px;
+            background: #343a40;
+            color: #ffffff;
+            border-radius: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .log-header {
+            padding: 10px 15px;
+            background: #495057;
+            border-radius: 8px 8px 0 0;
+            font-weight: bold;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .log-content {
+            padding: 10px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 0.8rem;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 5px;
+            padding: 5px;
+            border-radius: 4px;
+        }
+
+        .log-entry.start {
+            background: rgba(40, 167, 69, 0.2);
+            color: #d4edda;
+        }
+
+        .log-entry.end {
+            background: rgba(220, 53, 69, 0.2);
+            color: #f8d7da;
+        }
+
+        .log-entry.life {
+            background: rgba(255, 193, 7, 0.2);
+            color: #fff3cd;
+        }
+
+        .log-entry.info {
+            background: rgba(23, 162, 184, 0.2);
+            color: #d1ecf1;
+        }
+
+        .mobile-tests {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e3f2fd;
+            border-radius: 8px;
+        }
+
+        .test-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: white;
+            border-radius: 5px;
+            border-left: 4px solid #2196f3;
+        }
+
+        /* 网络状态指示器 */
+        .network-status {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 5px 10px;
+            border-radius: 15px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            z-index: 1000;
+        }
+
+        .network-status.online {
+            background: #28a745;
+            color: white;
+        }
+
+        .network-status.offline {
+            background: #dc3545;
+            color: white;
+        }
+
+        /* 触摸反馈 */
+        .btn:active, .touch-area:active {
+            transform: scale(0.95);
+        }
+
+        /* 滚动优化 */
+        .log-content {
+            -webkit-overflow-scrolling: touch;
+        }
+    </style>
+</head>
+<body>
+    <div class="network-status" id="networkStatus">在线</div>
+    
+    <div class="container">
+        <div class="header">
+            <h1>📱 Session Lifecycle</h1>
+            <div>移动端兼容性测试</div>
+        </div>
+
+        <!-- 设备信息 -->
+        <div class="device-info" id="deviceInfo">
+            <div><span class="label">设备类型:</span> <span id="deviceType">检测中...</span></div>
+            <div><span class="label">用户代理:</span> <span id="userAgent">...</span></div>
+            <div><span class="label">屏幕尺寸:</span> <span id="screenSize">...</span></div>
+            <div><span class="label">触摸支持:</span> <span id="touchSupport">...</span></div>
+            <div><span class="label">方向:</span> <span id="orientation">...</span></div>
+        </div>
+
+        <!-- 状态面板 -->
+        <div class="status-panel">
+            <div class="status-card inactive" id="sessionStatus">
+                会话状态<br><span id="statusText">未激活</span>
+            </div>
+            <div class="status-card" id="networkCard">
+                网络状态<br><span id="networkText">在线</span>
+            </div>
+        </div>
+
+        <!-- 控制按钮 -->
+        <div class="controls">
+            <button class="btn btn-primary" onclick="simulateActivity()">模拟活动</button>
+            <button class="btn btn-warning" onclick="toggleDebug()">切换调试</button>
+        </div>
+
+        <!-- 触摸测试区域 -->
+        <div class="touch-area" id="touchArea">
+            <h3>👆 触摸测试区域</h3>
+            <p>触摸、滑动、捏合手势测试</p>
+            <small>最后活动: <span id="lastActivity">无</span></small>
+        </div>
+
+        <!-- 移动端特殊测试 -->
+        <div class="mobile-tests">
+            <h3>📋 移动端特殊场景测试</h3>
+            <div class="test-item">
+                <strong>🔄 方向变化:</strong> 旋转设备测试方向变化事件
+            </div>
+            <div class="test-item">
+                <strong>📶 网络切换:</strong> 关闭WiFi或数据连接测试
+            </div>
+            <div class="test-item">
+                <strong>🔄 应用切换:</strong> 切换到其他App再切回测试
+            </div>
+            <div class="test-item">
+                <strong>💤 后台运行:</strong> 长时间后台再激活测试
+            </div>
+        </div>
+
+        <!-- 日志显示 -->
+        <div class="log-container">
+            <div class="log-header">
+                <span>📋 实时日志</span>
+                <button class="btn-danger" onclick="clearLog()" style="padding: 2px 8px; font-size: 0.7rem; border-radius: 4px; border: none; color: white;">清空</button>
+            </div>
+            <div class="log-content" id="log">
+                <!-- 日志将在这里显示 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 使用本地构建的session-lifecycle -->
+    <script src="../dist/umd/session-lifecycle.min.js"></script>
+    <script>
+        let sessionInstance = null;
+        let debugMode = true;
+
+        // 更新设备信息
+        function updateDeviceInfo() {
+            document.getElementById('deviceType').textContent = /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) ? '移动设备' : '桌面设备';
+            document.getElementById('userAgent').textContent = navigator.userAgent.substring(0, 50) + '...';
+            document.getElementById('screenSize').textContent = `${screen.width}x${screen.height}`;
+            document.getElementById('touchSupport').textContent = 'ontouchstart' in window ? '支持' : '不支持';
+            updateOrientation();
+        }
+
+        function updateOrientation() {
+            const orientation = screen.orientation ? screen.orientation.angle : (window.orientation || 0);
+            document.getElementById('orientation').textContent = `${orientation}°`;
+        }
+
+        // 更新网络状态
+        function updateNetworkStatus() {
+            const isOnline = navigator.onLine;
+            const statusElement = document.getElementById('networkStatus');
+            const networkCard = document.getElementById('networkCard');
+            const networkText = document.getElementById('networkText');
+            
+            if (isOnline) {
+                statusElement.textContent = '在线';
+                statusElement.className = 'network-status online';
+                networkCard.className = 'status-card active';
+                networkText.textContent = '在线';
+            } else {
+                statusElement.textContent = '离线';
+                statusElement.className = 'network-status offline';
+                networkCard.className = 'status-card inactive';
+                networkText.textContent = '离线';
+            }
+        }
+
+        // 日志函数
+        function log(message, type = 'info') {
+            const logElement = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString('zh-CN');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry ${type}`;
+            
+            let icon = '📋';
+            if (type === 'start') icon = '🚀';
+            else if (type === 'end') icon = '🔴';
+            else if (type === 'life') icon = '💓';
+            else if (type === 'info') icon = 'ℹ️';
+            
+            logEntry.innerHTML = `${timestamp} - ${icon} ${message}`;
+            logElement.appendChild(logEntry);
+            logElement.scrollTop = logElement.scrollHeight;
+        }
+
+        // 更新状态显示
+        function updateStatus(status, type = '') {
+            const statusElement = document.getElementById('sessionStatus');
+            const statusText = document.getElementById('statusText');
+            
+            statusElement.className = `status-card ${status.toLowerCase()}`;
+            statusText.textContent = status + (type ? ` (${type})` : '');
+            
+            // 更新背景色
+            if (status === 'ACTIVE') {
+                document.body.style.background = 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)';
+            } else if (status === 'PAUSED') {
+                document.body.style.background = 'linear-gradient(135deg, #ffeaa7 0%, #fab1a0 100%)';
+            } else {
+                document.body.style.background = 'linear-gradient(135deg, #ddd6fe 0%, #e8b4ff 100%)';
+            }
+        }
+
+        // 模拟用户活动
+        function simulateActivity() {
+            log('手动触发用户活动', 'info');
+            document.dispatchEvent(new Event('touchstart'));
+            updateLastActivity('手动触发');
+        }
+
+        // 更新最后活动时间
+        function updateLastActivity(type) {
+            const lastActivity = document.getElementById('lastActivity');
+            const time = new Date().toLocaleTimeString('zh-CN');
+            lastActivity.textContent = `${type} - ${time}`;
+        }
+
+        // 切换调试模式
+        async function toggleDebug() {
+            debugMode = !debugMode;
+            if (sessionInstance) {
+                await sessionInstance.destroy();
+            }
+            await initializeSession();
+        }
+
+        // 清空日志
+        function clearLog() {
+            document.getElementById('log').innerHTML = '';
+        }
+
+        // 触摸区域事件
+        function setupTouchArea() {
+            const touchArea = document.getElementById('touchArea');
+            
+            // 触摸事件
+            ['touchstart', 'touchmove', 'touchend', 'touchcancel'].forEach(eventType => {
+                touchArea.addEventListener(eventType, (e) => {
+                    touchArea.classList.add('touched');
+                    setTimeout(() => touchArea.classList.remove('touched'), 300);
+                    updateLastActivity(`触摸-${eventType}`);
+                    log(`触摸事件: ${eventType}`, 'info');
+                }, { passive: true });
+            });
+
+            // 手势事件 (iOS Safari)
+            ['gesturestart', 'gesturechange', 'gestureend'].forEach(eventType => {
+                touchArea.addEventListener(eventType, (e) => {
+                    updateLastActivity(`手势-${eventType}`);
+                    log(`手势事件: ${eventType}`, 'info');
+                }, { passive: true });
+            });
+
+            // 鼠标事件（兼容性）
+            touchArea.addEventListener('click', () => {
+                updateLastActivity('点击');
+                log('点击事件', 'info');
+            });
+        }
+
+        // 初始化会话
+        async function initializeSession() {
+            try {
+                // 创建会话生命周期实例
+                sessionInstance = await SessionLifecycle.default({
+                    debug: debugMode,
+                    heartbeatInterval: 3000, // 15秒心跳（测试用）
+                    inactivityTimeout: 10000  // 30秒不活动超时（测试用）
+                });
+                
+                const { on_session_start, on_session_end, on_session_life } = sessionInstance;
+                
+                // 注册会话开始事件
+                on_session_start((data) => {
+                    const typeText = data.type === 'init' ? '初始化' : '重新激活';
+                    log(`🚀 会话开始！类型: ${typeText}, 时间戳: ${data.timestamp}`, 'start');
+                    updateStatus('ACTIVE', data.type);
+                });
+                
+                // 注册会话结束事件
+                on_session_end((data) => {
+                    const sessionDuration = Math.round(data.duration / 1000);
+                    const totalDuration = Math.round(data.total_duration / 1000);
+                    log(`🔴 会话结束！会话时长: ${sessionDuration}秒, 总时长: ${totalDuration}秒`, 'end');
+                    updateStatus('INACTIVE');
+                });
+                
+                // 注册会话生命周期事件（心跳）
+                on_session_life((data) => {
+                    const intervalTime = Math.round(data.duration / 1000);
+                    const totalTime = Math.round(data.total_duration / 1000);
+                    log(`💓 会话心跳！心跳间隔: ${intervalTime}秒, 会话总时长: ${totalTime}秒`, 'life');
+                });
+
+                log('Session Lifecycle 已初始化' + (debugMode ? ' (调试模式)' : ''), 'info');
+            } catch (error) {
+                log(`初始化失败: ${error.message}`, 'end');
+            }
+        }
+
+        // 页面加载完成后初始化
+        window.addEventListener('load', async function() {
+            updateDeviceInfo();
+            updateNetworkStatus();
+            setupTouchArea();
+            await initializeSession();
+            
+            log('移动端测试页面加载完成', 'info');
+        });
+
+        // 监听页面可见性变化
+        document.addEventListener('visibilitychange', function() {
+            if (document.hidden) {
+                updateStatus('PAUSED');
+                log('页面隐藏 (visibilitychange)', 'info');
+            } else {
+                log('页面显示 (visibilitychange)', 'info');
+            }
+        });
+
+        // 监听网络状态变化
+        window.addEventListener('online', () => {
+            updateNetworkStatus();
+            log('网络连接恢复', 'info');
+        });
+
+        window.addEventListener('offline', () => {
+            updateNetworkStatus();
+            log('网络连接断开', 'info');
+        });
+
+        // 监听方向变化
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => {
+                updateOrientation();
+                log('设备方向改变', 'info');
+            }, 100);
+        });
+
+        // 监听focus/blur事件
+        window.addEventListener('focus', () => {
+            log('窗口获得焦点', 'info');
+        });
+
+        window.addEventListener('blur', () => {
+            log('窗口失去焦点', 'info');
+        });
+
+        // 监听pagehide/pageshow事件
+        window.addEventListener('pageshow', () => {
+            log('页面显示 (pageshow)', 'info');
+        });
+
+        window.addEventListener('pagehide', () => {
+            log('页面隐藏 (pagehide)', 'info');
+        });
+    </script>
+</body>
+</html>

@@ -106,20 +106,73 @@ export class SessionLifecycle {
   private visibilityChangeListener: (() => void) | null = null;
   private activityListeners: Array<{ element: Element | Document | Window, event: string, listener: () => void }> = [];
   private beforeUnloadListener: (() => void) | null = null;
+  private mobileLifecycleListeners: Array<{ element: Element | Document | Window, event: string, listener: () => void }> = [];
   
   private isInitialized = false;
+  private isMobile = false;
 
   /**
    * Create a new SessionLifecycle instance
    * @param config - Optional configuration object
    */
   constructor(config: SessionLifecycleConfig = {}) {
+    // 检测移动设备
+    this.isMobile = this.detectMobileDevice();
+    
+    // 根据设备类型设置默认配置
+    const mobileOptimizedDefaults = this.isMobile ? {
+      heartbeatInterval: 30000, // 移动端使用更长的心跳间隔以节省电量
+      inactivityTimeout: 120000, // 移动端使用更长的不活动超时（3分钟）
+      debug: false
+    } : {
+      heartbeatInterval: 30000, // 桌面端30秒
+      inactivityTimeout: 120000, // 桌面端2分钟
+      debug: false
+    };
+
     this.config = {
-      heartbeatInterval: 30000, // 30 seconds
-      inactivityTimeout: 120000, // 2 minutes
-      debug: false,
+      ...mobileOptimizedDefaults,
       ...config
     };
+
+    if (this.config.debug) {
+      this.log(`Device detected: ${this.isMobile ? 'Mobile' : 'Desktop'}`);
+      this.log(`Config: heartbeat=${this.config.heartbeatInterval}ms, inactivity=${this.config.inactivityTimeout}ms`);
+    }
+  }
+
+  /**
+   * Detect if the current device is a mobile device
+   */
+  private detectMobileDevice(): boolean {
+    if (typeof window === 'undefined' || typeof navigator === 'undefined') {
+      return false; // Server-side or non-browser environment
+    }
+
+    // 检查用户代理字符串
+    const userAgent = navigator.userAgent.toLowerCase();
+    const mobileKeywords = [
+      'android', 'webos', 'iphone', 'ipad', 'ipod', 'blackberry', 
+      'windows phone', 'mobile', 'opera mini', 'iemobile'
+    ];
+    
+    const isMobileUA = mobileKeywords.some(keyword => userAgent.includes(keyword));
+
+    // 检查触摸支持
+    const hasTouchSupport = 'ontouchstart' in window || 
+                          (navigator.maxTouchPoints && navigator.maxTouchPoints > 0);
+
+    // 检查屏幕尺寸（移动端通常较小）
+    const hasSmallScreen = window.screen && 
+                          (window.screen.width <= 768 || window.screen.height <= 768);
+
+    // 检查设备方向API（主要在移动设备上可用）
+    const hasOrientationAPI = 'orientation' in window;
+
+    // 综合判断
+    const isMobile = isMobileUA || (hasTouchSupport && hasSmallScreen) || hasOrientationAPI;
+
+    return isMobile;
   }
 
   /**
@@ -194,6 +247,7 @@ export class SessionLifecycle {
     // Set up event listeners
     this.setupPageVisibilityListener();
     this.setupActivityListeners();
+    this.setupMobileLifecycleListeners();
     this.setupBeforeUnloadListener();
 
     // Start session
@@ -229,7 +283,25 @@ export class SessionLifecycle {
   private setupActivityListeners(): void {
     if (typeof window === 'undefined' || typeof document === 'undefined') return;
 
-    const events = ['click', 'scroll', 'mousemove', 'keydown', 'touchstart', 'touchmove'];
+    // 基础事件（所有设备）
+    const baseEvents = ['click', 'scroll', 'keydown'];
+    
+    // 移动端触摸事件
+    const touchEvents = ['touchstart', 'touchmove', 'touchend', 'touchcancel'];
+    
+    // 桌面端鼠标事件
+    const mouseEvents = ['mousemove', 'mousedown', 'mouseup'];
+    
+    // 手势事件（iOS Safari）
+    const gestureEvents = ['gesturestart', 'gesturechange', 'gestureend'];
+    
+    // 组合所有事件
+    const events = [
+      ...baseEvents,
+      ...touchEvents,
+      ...mouseEvents,
+      ...gestureEvents
+    ];
     
     const activityHandler = () => {
       this.onUserActivity();
@@ -242,8 +314,92 @@ export class SessionLifecycle {
         listener: activityHandler 
       };
       this.activityListeners.push(listener);
-      document.addEventListener(eventName, listener.listener, { passive: true });
+      
+      // 使用 passive 监听器提高移动端性能
+      document.addEventListener(eventName, listener.listener, { 
+        passive: true,
+        capture: false 
+      });
     });
+    
+    this.log(`Activity listeners registered: ${events.length} events`);
+  }
+
+  /**
+   * Set up mobile-specific lifecycle listeners
+   */
+  private setupMobileLifecycleListeners(): void {
+    if (typeof window === 'undefined') return;
+
+    // 设备方向变化（移动端）
+    const orientationHandler = () => {
+      this.log('Device orientation changed');
+      this.onUserActivity(); // 方向变化视为用户活动
+    };
+
+    // 网络状态变化
+    const networkHandler = () => {
+      const isOnline = typeof navigator !== 'undefined' ? navigator.onLine : true;
+      this.log(`Network status changed: ${isOnline ? 'online' : 'offline'}`);
+      
+      if (!isOnline && this.state === SessionState.ACTIVE) {
+        // 网络断开时暂停会话
+        this.log('Network offline - pausing session');
+        this.pauseSession().catch(error => {
+          console.error('Error pausing session due to network offline:', error);
+        });
+      } else if (isOnline && this.state === SessionState.PAUSED) {
+        // 网络恢复时可能需要恢复会话
+        this.log('Network online - resuming session may be needed');
+        this.onUserActivity(); // 触发活动检测
+      }
+    };
+
+    // 页面显示/隐藏（移动端更可靠）
+    const pageShowHandler = () => {
+      this.log('Page shown (pageshow event)');
+      if (this.state === SessionState.PAUSED) {
+        this.resumeSession();
+      }
+    };
+
+    const pageHideHandler = () => {
+      this.log('Page hidden (pagehide event)');
+      if (this.state === SessionState.ACTIVE) {
+        this.pauseSession().catch(error => {
+          console.error('Error pausing session during pagehide:', error);
+        });
+      }
+    };
+
+    // 应用焦点变化
+    const focusHandler = () => {
+      this.log('Window gained focus');
+      this.onUserActivity();
+    };
+
+    const blurHandler = () => {
+      this.log('Window lost focus');
+      // 失去焦点时不立即暂停，等待visibilitychange或pagehide
+    };
+
+    // 注册事件监听器
+    const mobileEvents = [
+      { element: window, event: 'orientationchange', listener: orientationHandler },
+      { element: window, event: 'online', listener: networkHandler },
+      { element: window, event: 'offline', listener: networkHandler },
+      { element: window, event: 'pageshow', listener: pageShowHandler },
+      { element: window, event: 'pagehide', listener: pageHideHandler },
+      { element: window, event: 'focus', listener: focusHandler },
+      { element: window, event: 'blur', listener: blurHandler }
+    ];
+
+    mobileEvents.forEach(({ element, event, listener }) => {
+      this.mobileLifecycleListeners.push({ element, event, listener });
+      element.addEventListener(event, listener, { passive: true });
+    });
+
+    this.log(`Mobile lifecycle listeners registered: ${mobileEvents.length} events`);
   }
 
   /**
@@ -376,16 +532,38 @@ export class SessionLifecycle {
     const now = Date.now();
     const pauseDuration = this.pauseStartTime > 0 ? now - this.pauseStartTime : 0;
     
-    this.log(`Attempting to resume session after ${pauseDuration}ms pause`);
+    this.log(`Attempting to resume session after ${pauseDuration}ms pause (${this.isMobile ? 'Mobile' : 'Desktop'})`);
     
-    // 只有暂停超过30秒才重新启动会话
-    if (pauseDuration > this.config.heartbeatInterval) {
-      this.log(`Pause duration > ${this.config.heartbeatInterval}ms, starting new session`);
+    // 移动端使用更保守的恢复策略
+    // const resumeThreshold = this.isMobile 
+    //   ? Math.max(this.config.heartbeatInterval * 2, 60000) // 移动端：至少1分钟或2倍心跳间隔
+    //   : this.config.heartbeatInterval; // 桌面端：心跳间隔
+    const resumeThreshold = this.config.heartbeatInterval;
+    
+    if (pauseDuration > resumeThreshold) {
+      this.log(`Pause duration > ${resumeThreshold}ms (threshold), starting new session`);
       this.startSession('active');
     } else {
-      this.log(`Pause duration <= ${this.config.heartbeatInterval}ms, not resuming session`);
-      // 可选：这里可以直接切换状态到INACTIVE，等待用户活动重新触发
-      this.state = SessionState.INACTIVE;
+      this.log(`Pause duration <= ${resumeThreshold}ms (threshold), resuming current session`);
+      
+      // 移动端：更保守的恢复策略
+      if (this.isMobile) {
+        // 移动端先设为INACTIVE，等待用户活动
+        this.state = SessionState.INACTIVE;
+        this.log('Mobile device: waiting for user activity before full resume');
+      } else {
+        // 桌面端：直接恢复
+        this.state = SessionState.ACTIVE;
+        this.startHeartbeat();
+        this.resetInactivityTimer();
+        
+        this.triggerSessionStart({
+          type: 'active',
+          timestamp: now
+        });
+        
+        this.lastEventTime = now;
+      }
     }
   }
 
@@ -555,11 +733,16 @@ export class SessionLifecycle {
       element.removeEventListener(event, listener);
     });
 
+    this.mobileLifecycleListeners.forEach(({ element, event, listener }) => {
+      element.removeEventListener(event, listener);
+    });
+
     // Clear callbacks and listeners
     this.startCallbacks = [];
     this.endCallbacks = [];
     this.lifeCallbacks = [];
     this.activityListeners = [];
+    this.mobileLifecycleListeners = [];
     this.visibilityChangeListener = null;
     this.beforeUnloadListener = null;
     this.isInitialized = false;
