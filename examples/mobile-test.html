@@ -516,33 +516,33 @@
         });
 
         // 监听页面可见性变化
-        document.addEventListener('visibilitychange', function() {
-            if (document.hidden) {
-                updateStatus('PAUSED');
-                log('页面隐藏 (visibilitychange)', 'info');
-            } else {
-                log('页面显示 (visibilitychange)', 'info');
-            }
-        });
+        // document.addEventListener('visibilitychange', function() {
+        //     if (document.hidden) {
+        //         updateStatus('PAUSED');
+        //         log('页面隐藏 (visibilitychange)', 'info');
+        //     } else {
+        //         log('页面显示 (visibilitychange)', 'info');
+        //     }
+        // });
 
         // 监听网络状态变化
-        window.addEventListener('online', () => {
-            updateNetworkStatus();
-            log('网络连接恢复', 'info');
-        });
+        // window.addEventListener('online', () => {
+        //     updateNetworkStatus();
+        //     log('网络连接恢复', 'info');
+        // });
 
-        window.addEventListener('offline', () => {
-            updateNetworkStatus();
-            log('网络连接断开', 'info');
-        });
+        // window.addEventListener('offline', () => {
+        //     updateNetworkStatus();
+        //     log('网络连接断开', 'info');
+        // });
 
-        // 监听方向变化
-        window.addEventListener('orientationchange', () => {
-            setTimeout(() => {
-                updateOrientation();
-                log('设备方向改变', 'info');
-            }, 100);
-        });
+        // // 监听方向变化
+        // window.addEventListener('orientationchange', () => {
+        //     setTimeout(() => {
+        //         updateOrientation();
+        //         log('设备方向改变', 'info');
+        //     }, 100);
+        // });
 
         // 监听focus/blur事件
         window.addEventListener('focus', () => {

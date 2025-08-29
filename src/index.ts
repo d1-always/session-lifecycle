@@ -247,7 +247,12 @@ export class SessionLifecycle {
     // Set up event listeners
     this.setupPageVisibilityListener();
     this.setupActivityListeners();
-    this.setupMobileLifecycleListeners();
+    
+    // 只在移动设备上注册移动端特定的生命周期事件
+    if (this.isMobile) {
+      this.setupMobileLifecycleListeners();
+    }
+    
     this.setupBeforeUnloadListener();
 
     // Start session
@@ -498,7 +503,10 @@ export class SessionLifecycle {
    * Pause session (when page becomes hidden)
    */
   private async pauseSession(): Promise<void> {
-    if (this.state !== SessionState.ACTIVE) return;
+    if (this.state !== SessionState.ACTIVE) {
+      this.log(`Cannot pause session - current state: ${this.state}`);
+      return;
+    }
 
     const now = Date.now();
     const intervalDuration = this.lastEventTime > 0 ? now - this.lastEventTime : 0; // 最近一次事件到当前的间隔
@@ -508,7 +516,7 @@ export class SessionLifecycle {
     this.state = SessionState.PAUSED;
     this.pauseStartTime = now; // 记录暂停开始时间
 
-    // Stop timers
+    // Stop timers only (no callbacks triggered during pause)
     this.stopHeartbeat();
     this.stopInactivityTimer();
 
@@ -527,7 +535,10 @@ export class SessionLifecycle {
    * Resume session (when page becomes visible again)
    */
   private resumeSession(): void {
-    if (this.state !== SessionState.PAUSED) return;
+    if (this.state !== SessionState.PAUSED) {
+      this.log(`Cannot resume session - current state: ${this.state}`);
+      return;
+    }
 
     const now = Date.now();
     const pauseDuration = this.pauseStartTime > 0 ? now - this.pauseStartTime : 0;
@@ -544,26 +555,17 @@ export class SessionLifecycle {
       this.log(`Pause duration > ${resumeThreshold}ms (threshold), starting new session`);
       this.startSession('active');
     } else {
-      this.log(`Pause duration <= ${resumeThreshold}ms (threshold), resuming current session`);
+      // 短时间暂停：静默恢复，不触发任何回调
+      this.log(`Pause duration <= ${resumeThreshold}ms (threshold), silent resume without callbacks`);
       
-      // 移动端：更保守的恢复策略
-      if (this.isMobile) {
-        // 移动端先设为INACTIVE，等待用户活动
-        this.state = SessionState.INACTIVE;
-        this.log('Mobile device: waiting for user activity before full resume');
-      } else {
-        // 桌面端：直接恢复
-        this.state = SessionState.ACTIVE;
-        this.startHeartbeat();
-        this.resetInactivityTimer();
-        
-        this.triggerSessionStart({
-          type: 'active',
-          timestamp: now
-        });
-        
-        this.lastEventTime = now;
-      }
+      this.state = SessionState.ACTIVE;
+
+      this.lastHeartbeatTime = now;
+      this.startHeartbeat();
+      this.resetInactivityTimer();
+      
+      // 不触发 triggerSessionStart，因为这不是新会话，只是恢复
+      this.lastEventTime = now;
     }
   }
 
