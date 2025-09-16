@@ -1,6 +1,6 @@
 # 发布到 npm
 
-本文档说明如何发布 `session-lifecycle` 包到 npm。
+本文档说明如何发布 `@d1-always/session-lifecycle` 包到 npm。
 
 ## 发布前准备
 
@@ -59,13 +59,16 @@ npm pack --dry-run
 
 ### 3. 发布
 
+由于这是一个 scoped package（@d1-always/session-lifecycle），需要指定访问权限：
+
 ```bash
-npm publish
+# 发布到公共仓库
+npm publish --access public
 ```
 
-如果是第一次发布且包名可能被占用，使用：
+如果已经发布过，后续更新版本可以直接使用：
 ```bash
-npm publish --access public
+npm publish
 ```
 
 ## 版本管理

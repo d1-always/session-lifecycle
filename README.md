@@ -39,21 +39,21 @@ session-lifecycle/
 ### npm/yarn/pnpm
 
 ```bash
-npm install session-lifecycle
+npm install @d1-always/session-lifecycle
 # 或
-yarn add session-lifecycle
+yarn add @d1-always/session-lifecycle
 # 或
-pnpm install session-lifecycle
+pnpm install @d1-always/session-lifecycle
 ```
 
 ### CDN (通过 script 标签)
 
 ```html
 <!-- 开发版本 -->
-<script src="https://unpkg.com/session-lifecycle/dist/umd/session-lifecycle.js"></script>
+<script src="https://unpkg.com/@d1-always/session-lifecycle/dist/umd/session-lifecycle.js"></script>
 
 <!-- 生产版本 (压缩) -->
-<script src="https://unpkg.com/session-lifecycle/dist/umd/session-lifecycle.min.js"></script>
+<script src="https://unpkg.com/@d1-always/session-lifecycle/dist/umd/session-lifecycle.min.js"></script>
 ```
 
 ## 🎯 工作原理
@@ -70,7 +70,7 @@ pnpm install session-lifecycle
 ### ES 模块 / TypeScript
 
 ```typescript
-import createSessionLifecycle from 'session-lifecycle';
+import createSessionLifecycle from '@d1-always/session-lifecycle';
 
 // 创建会话生命周期实例 (异步)
 const { on_session_start, on_session_end, on_session_life, destroy } = await createSessionLifecycle({
@@ -113,7 +113,7 @@ await destroy();
 ### CommonJS
 
 ```javascript
-const createSessionLifecycle = require('session-lifecycle').default;
+const createSessionLifecycle = require('@d1-always/session-lifecycle').default;
 
 async function initSession() {
   const { on_session_start, on_session_end, on_session_life, destroy } = await createSessionLifecycle();
@@ -144,7 +144,7 @@ initSession().catch(console.error);
 ### 浏览器 (script 标签)
 
 ```html
-<script src="https://unpkg.com/session-lifecycle/dist/umd/session-lifecycle.min.js"></script>
+<script src="https://unpkg.com/@d1-always/session-lifecycle/dist/umd/session-lifecycle.min.js"></script>
 <script>
   async function initSession() {
     // 通过全局对象 SessionLifecycle 访问 (异步)
@@ -188,7 +188,7 @@ initSession().catch(console.error);
 如果你不想处理异步，可以使用同步版本：
 
 ```javascript
-import { createSessionLifecycleSync } from 'session-lifecycle';
+import { createSessionLifecycleSync } from '@d1-always/session-lifecycle';
 
 // 同步创建实例 (注意：销毁旧实例时不会等待回调完成)
 const { on_session_start, on_session_end, on_session_life, destroy } = createSessionLifecycleSync({
@@ -307,7 +307,7 @@ const session1 = await createSessionLifecycle({ heartbeatInterval: 10000 });
 const session2 = await createSessionLifecycle({ heartbeatInterval: 60000 });
 
 // 手动检查和管理实例
-import { hasActiveSessionLifecycle, destroyCurrentSessionLifecycle } from 'session-lifecycle';
+import { hasActiveSessionLifecycle, destroyCurrentSessionLifecycle } from '@d1-always/session-lifecycle';
 
 if (hasActiveSessionLifecycle()) {
   console.log('已有活跃实例');
@@ -495,7 +495,7 @@ import createSessionLifecycle, {
   SessionEndHandler, 
   SessionLifeHandler,
   SessionLifecycleMethods 
-} from 'session-lifecycle';
+} from '@d1-always/session-lifecycle';
 
 // 强类型的事件处理器
 const startHandler: SessionStartHandler = (data) => {
@@ -565,7 +565,7 @@ npm login
 npm publish
 
 # 发布成功后，用户就可以安装使用
-npm install session-lifecycle
+npm install @d1-always/session-lifecycle
 
 # 清理构建文件
 npm run clean
